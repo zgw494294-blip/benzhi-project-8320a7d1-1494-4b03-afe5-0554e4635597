@@ -209,9 +209,10 @@ func (s *Service) VerifyAndFreeze(id string, cmd FreezeCommand) (domain.Verifica
 	cred.Digest = analysis.CredentialDigest(cred)
 	a.CredentialID = cred.CredentialID
 	c.Credential = &cred
-	core.AvailableMassMg = cmd.RemainingMassMg
+	beforeAvailable := core.AvailableMassMg
+	core.AvailableMassMg -= c.Execution.SampleMassMg
 	core.Revision++
-	cv := domain.CoreVersion{Core: core, ChangeSummary: []domain.Change{{Field: "availableMassMg", Before: c.Execution.MassBeforeMg, After: cmd.RemainingMassMg}}, RevisionNote: "余样核验通过并冻结", CreatedAt: now}
+	cv := domain.CoreVersion{Core: core, ChangeSummary: []domain.Change{{Field: "availableMassMg", Before: beforeAvailable, After: core.AvailableMassMg}}, RevisionNote: "余样核验通过并冻结", CreatedAt: now}
 	v := domain.CaseVersion{Case: c, ChangeSummary: []domain.Change{{Field: "status", Before: domain.Executed, After: domain.Frozen}}, RevisionNote: "余样核验通过并签发凭据", Actor: a.Verifier, CreatedAt: now}
 	if e = s.st.CommitFreeze(c, v, core, cv, a, cred); e != nil {
 		return domain.VerificationAttempt{}, e
