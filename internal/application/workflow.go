@@ -265,40 +265,40 @@ func (s *Service) VerifyCredential(id string) (domain.CredentialVerification, er
 	if e != nil {
 		return domain.CredentialVerification{}, e
 	}
-	s.credentialMismatches = s.credentialMismatches[:0]
+	mismatches := make([]string, 0, 8)
 	result := domain.CredentialVerification{Valid: true, Credential: cred}
 	c, e := s.st.Case(cred.CaseID)
 	if e != nil {
-		s.credentialMismatches = append(s.credentialMismatches, "caseId")
+		mismatches = append(mismatches, "caseId")
 	} else {
 		if c.CoreID != cred.CoreID {
-			s.credentialMismatches = append(s.credentialMismatches, "coreId")
+			mismatches = append(mismatches, "coreId")
 		}
 		if c.Revision != cred.FrozenRevision {
-			s.credentialMismatches = append(s.credentialMismatches, "frozenRevision")
+			mismatches = append(mismatches, "frozenRevision")
 		}
 		if c.Credential == nil || c.Credential.CredentialID != cred.CredentialID {
-			s.credentialMismatches = append(s.credentialMismatches, "credentialId")
+			mismatches = append(mismatches, "credentialId")
 		} else if c.Credential.VerificationDigest != cred.VerificationDigest {
-			s.credentialMismatches = append(s.credentialMismatches, "verificationDigest")
+			mismatches = append(mismatches, "verificationDigest")
 		}
 		x, e2 := s.st.Execution(c.CaseID)
 		if e2 != nil {
-			s.credentialMismatches = append(s.credentialMismatches, "execution")
+			mismatches = append(mismatches, "execution")
 		} else {
 			if domain.SegmentDigest(x.ActualSegments) != cred.SegmentDigest {
-				s.credentialMismatches = append(s.credentialMismatches, "segmentDigest")
+				mismatches = append(mismatches, "segmentDigest")
 			}
 			if analysis.ExecutionDigest(x) != cred.ExecutionDigest {
-				s.credentialMismatches = append(s.credentialMismatches, "executionDigest")
+				mismatches = append(mismatches, "executionDigest")
 			}
 		}
 	}
 	if analysis.CredentialDigest(cred) != cred.Digest {
-		s.credentialMismatches = append(s.credentialMismatches, "digest")
+		mismatches = append(mismatches, "digest")
 	}
-	sort.Strings(s.credentialMismatches)
-	result.Mismatches = s.credentialMismatches
-	result.Valid = len(s.credentialMismatches) == 0
+	sort.Strings(mismatches)
+	result.Mismatches = mismatches
+	result.Valid = len(mismatches) == 0
 	return result, nil
 }
