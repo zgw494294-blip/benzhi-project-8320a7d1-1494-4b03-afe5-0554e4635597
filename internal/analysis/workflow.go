@@ -30,6 +30,12 @@ func ExecutionViolations(m domain.AuthorizationManifest, core domain.CoreRecord,
 		if seg.Start < core.DepthStartMm || seg.End > core.DepthEndMm {
 			out = append(out, domain.Violation{Code: "SEGMENT_OUTSIDE_CORE", Message: "实际区段超出岩芯初始深度范围", Segment: &x})
 		}
+		for _, p := range core.ProtectedIntervals {
+			if p.Overlap(domain.Interval{Start: seg.Start, End: seg.End}) {
+				out = append(out, domain.Violation{Code: "SEGMENT_OVERLAPS_PROTECTED", Message: "实际区段越过保护区边界", Segment: &x})
+				break
+			}
+		}
 		for _, a := range m.RequestedSegments {
 			if seg.Start >= a.Start-m.DepthToleranceMm && seg.End <= a.End+m.DepthToleranceMm && seg.Valid() {
 				ok = true
