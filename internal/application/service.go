@@ -26,6 +26,11 @@ func (s *Service) lock(id string) *sync.Mutex {
 	v, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
 	return v.(*sync.Mutex)
 }
+func (s *Service) invalidateAvailable(coreID string) {
+	s.availableMu.Lock()
+	delete(s.availableCache, coreID)
+	s.availableMu.Unlock()
+}
 func (s *Service) RegisterCore(c domain.CoreRecord) error {
 	if e := domain.ValidateCore(c); e != nil {
 		return e
@@ -39,7 +44,11 @@ func (s *Service) RegisterCore(c domain.CoreRecord) error {
 	c.ProtectedIntervals = domain.NormalizeIntervals(c.ProtectedIntervals)
 	c.Revision = 1
 	now := time.Now().UTC()
-	return s.st.SaveCoreVersion(c, domain.CoreVersion{Core: c, ChangeSummary: []domain.Change{}, CreatedAt: now})
+	if e := s.st.SaveCoreVersion(c, domain.CoreVersion{Core: c, ChangeSummary: []domain.Change{}, CreatedAt: now}); e != nil {
+		return e
+	}
+	s.invalidateAvailable(c.CoreID)
+	return nil
 }
 func (s *Service) GetCore(id string) (domain.CoreRecord, error)         { return s.st.Core(id) }
 func (s *Service) ListCores() []domain.CoreRecord                       { return s.st.Cores() }
@@ -143,6 +152,7 @@ func (s *Service) ReviseCoreDetailed(id string, cmd CoreRevisionCommand) (domain
 	if e = s.st.SaveCoreVersion(next, v); e != nil {
 		return domain.CoreVersion{}, impact, e
 	}
+	s.invalidateAvailable(id)
 	return v, impact, nil
 }
 
@@ -180,7 +190,11 @@ func (s *Service) CreateCase(c domain.SamplingCase, expected int) (domain.Sampli
 	c.UpdatedAt = now
 	c.Findings = []domain.ReviewFinding{}
 	v := domain.CaseVersion{Case: c, ChangeSummary: []domain.Change{}, RevisionNote: "创建案卷", CreatedAt: now}
-	return c, s.st.SaveCaseVersion(c, v)
+	if e := s.st.SaveCaseVersion(c, v); e != nil {
+		return c, e
+	}
+	s.invalidateAvailable(c.CoreID)
+	return c, nil
 }
 func (s *Service) GetCase(id string) (domain.SamplingCase, error)       { return s.st.Case(id) }
 func (s *Service) CaseVersions(id string) ([]domain.CaseVersion, error) { return s.st.CaseVersions(id) }
@@ -234,6 +248,7 @@ func (s *Service) ReviseCaseCommand(id string, cmd CaseRevisionCommand) (domain.
 	if e = s.st.SaveCaseVersion(next, v); e != nil {
 		return domain.CaseVersion{}, e
 	}
+	s.invalidateAvailable(next.CoreID)
 	return v, nil
 }
 func (s *Service) ReviseCase(id string, expected int, purpose, method string, seg []domain.Segment) (domain.SamplingCase, error) {
@@ -397,7 +412,11 @@ func (s *Service) ReturnCaseIssues(id string, issues []ReviewIssue) (domain.Samp
 		events = append(events, domain.FindingEvent{EventID: "open-" + idn, FindingID: idn, CaseID: id, Type: "Opened", CaseRevision: openedRevision, Code: f.Code, Message: f.Message, SegmentRef: f.SegmentRef, OccurredAt: now})
 	}
 	v := domain.CaseVersion{Case: c, ChangeSummary: []domain.Change{{Field: "status", Before: previousStatus, After: domain.Returned}}, RevisionNote: "复核退回", CreatedAt: now}
-	return c, s.st.SaveFindingChanges(c, v, events)
+	if e := s.st.SaveFindingChanges(c, v, events); e != nil {
+		return c, e
+	}
+	s.invalidateAvailable(c.CoreID)
+	return c, nil
 }
 func (s *Service) ReturnCase(id, code, msg string) (domain.SamplingCase, error) {
 	return s.ReturnCaseIssues(id, []ReviewIssue{{Code: code, Message: msg}})
@@ -443,7 +462,13 @@ func (s *Service) CloseFindingWithRevision(id, fid, note string, caseRevision in
 	c.Findings[idx].ClosedAt = now
 	c.UpdatedAt = now
 	event := domain.FindingEvent{EventID: fmt.Sprintf("close-%d", now.UnixNano()), FindingID: fid, CaseID: id, Type: "Closed", CaseRevision: caseRevision, ClosureNote: strings.TrimSpace(note), OccurredAt: now}
-	return c, s.st.SaveFindingEvents(c, []domain.FindingEvent{event})
+	if e := s.st.SaveFindingEvents(c, []domain.FindingEvent{event}); e != nil {
+		return c, e
+	}
+	// Findings do not alter occupancy, but keep the cache consistent with the
+	// updated case revision reflected in occupancy reasons.
+	s.invalidateAvailable(c.CoreID)
+	return c, nil
 }
 func (s *Service) CloseFinding(id, fid, note string) (domain.SamplingCase, error) {
 	c, e := s.st.Case(id)
@@ -526,5 +551,9 @@ func (s *Service) SubmitCase(id string) (domain.SamplingCase, error) {
 	}
 	c.Status = domain.Submitted
 	c.UpdatedAt = time.Now().UTC()
-	return c, s.st.SaveCase(c)
+	if e := s.st.SaveCase(c); e != nil {
+		return c, e
+	}
+	s.invalidateAvailable(c.CoreID)
+	return c, nil
 }

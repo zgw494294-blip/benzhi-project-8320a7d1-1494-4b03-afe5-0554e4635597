@@ -38,6 +38,7 @@ func (s *Service) Authorize(id string) (domain.SamplingCase, error) {
 	if e = s.st.SaveAuthorization(c, m); e != nil {
 		return c, e
 	}
+	s.invalidateAvailable(c.CoreID)
 	return c, nil
 }
 func (s *Service) Authorization(id string) (domain.AuthorizationView, error) {
@@ -129,6 +130,7 @@ func (s *Service) ExecuteReceipt(id, key, auth string, actual []domain.Segment, 
 	if e = s.st.CommitExecution(c, v, x, r); e != nil {
 		return domain.ExecutionReceipt{}, e
 	}
+	s.invalidateAvailable(c.CoreID)
 	return r, nil
 }
 func (s *Service) Execute(id, key, auth string, actual []domain.Segment, before, sample, after int, container, operator, witness string) (domain.CutExecution, error) {
@@ -216,6 +218,7 @@ func (s *Service) VerifyAndFreeze(id string, cmd FreezeCommand) (domain.Verifica
 	if e = s.st.CommitFreeze(c, v, core, cv, a, cred); e != nil {
 		return domain.VerificationAttempt{}, e
 	}
+	s.invalidateAvailable(c.CoreID)
 	return a, nil
 }
 func (s *Service) Freeze(id string, remaining int, location string) (domain.ProvenanceCredential, error) {
