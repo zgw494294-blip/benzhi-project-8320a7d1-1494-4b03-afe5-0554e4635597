@@ -83,6 +83,7 @@ func New(dir string) (*Store, error) {
 		}
 	}
 	s.data.init()
+	s.rebuildVerificationKeys()
 	return s, nil
 }
 func clone(d snapshot) (snapshot, error) {
@@ -273,6 +274,16 @@ func (s *Store) VerificationByKey(caseID, key string) (domain.VerificationAttemp
 	defer s.mu.RUnlock()
 	v, ok := s.verificationKeys[receiptKey(caseID, key)]
 	return copyValue(v), ok
+}
+func (s *Store) rebuildVerificationKeys() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.verificationKeys = map[string]domain.VerificationAttempt{}
+	for _, list := range s.data.VerificationAttempts {
+		for _, a := range list {
+			s.verificationKeys[receiptKey(a.CaseID, a.VerificationKey)] = copyValue(a)
+		}
+	}
 }
 func (s *Store) VerificationAttempts(caseID string) []domain.VerificationAttempt {
 	s.mu.RLock()
