@@ -13,11 +13,15 @@ import (
 )
 
 type Service struct {
-	st    *store.Store
-	locks sync.Map
+	st             *store.Store
+	locks          sync.Map
+	availableMu    sync.RWMutex
+	availableCache map[string]domain.AvailabilityView
 }
 
-func New(st *store.Store) *Service { return &Service{st: st} }
+func New(st *store.Store) *Service {
+	return &Service{st: st, availableCache: make(map[string]domain.AvailabilityView)}
+}
 func (s *Service) lock(id string) *sync.Mutex {
 	v, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
 	return v.(*sync.Mutex)

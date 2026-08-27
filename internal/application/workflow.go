@@ -254,11 +254,25 @@ func (s *Service) VerificationAttempt(id, ref string) (domain.VerificationAttemp
 	return domain.VerificationAttempt{}, domain.ErrNotFound
 }
 func (s *Service) Available(coreID string) (domain.AvailabilityView, error) {
+	s.availableMu.RLock()
+	if cached, ok := s.availableCache[coreID]; ok {
+		s.availableMu.RUnlock()
+		return cached, nil
+	}
+	s.availableMu.RUnlock()
 	core, e := s.st.Core(coreID)
 	if e != nil {
 		return domain.AvailabilityView{}, e
 	}
-	return analysis.Availability(core, s.st.Cases()), nil
+	view := analysis.Availability(core, s.st.Cases())
+	s.availableMu.Lock()
+	if cached, ok := s.availableCache[coreID]; ok {
+		view = cached
+	} else {
+		s.availableCache[coreID] = view
+	}
+	s.availableMu.Unlock()
+	return view, nil
 }
 func (s *Service) VerifyCredential(id string) (domain.CredentialVerification, error) {
 	cred, e := s.st.Credential(id)
