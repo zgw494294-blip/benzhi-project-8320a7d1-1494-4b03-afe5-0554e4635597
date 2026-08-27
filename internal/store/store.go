@@ -191,7 +191,12 @@ func (s *Store) Cases() []domain.SamplingCase {
 	defer s.mu.RUnlock()
 	out := make([]domain.SamplingCase, 0, len(s.data.Cases))
 	for _, v := range s.data.Cases {
-		out = append(out, copyValue(v))
+		c := v
+		c.RequestedSegments = v.RequestedSegments
+		c.Findings = v.Findings
+		c.Execution = v.Execution
+		c.Credential = v.Credential
+		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CaseID < out[j].CaseID })
 	return out
