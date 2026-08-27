@@ -19,18 +19,18 @@ type snapshot struct {
 	Executions           map[string]domain.CutExecution          `json:"executions"`
 	ExecutionReceipts    map[string]domain.ExecutionReceipt      `json:"executionReceipts"`
 	VerificationAttempts map[string][]domain.VerificationAttempt `json:"verificationAttempts"`
-	VerificationKeys     map[string]domain.VerificationAttempt   `json:"verificationKeys"`
 	FindingEvents        map[string][]domain.FindingEvent        `json:"findingEvents"`
 	Credentials          map[string]domain.ProvenanceCredential  `json:"credentials"`
 }
 type Store struct {
-	mu   sync.RWMutex
-	dir  string
-	data snapshot
+	mu               sync.RWMutex
+	dir              string
+	data             snapshot
+	verificationKeys map[string]domain.VerificationAttempt
 }
 
 func emptySnapshot() snapshot {
-	return snapshot{Cores: map[string]domain.CoreRecord{}, CoreVersions: map[string][]domain.CoreVersion{}, Cases: map[string]domain.SamplingCase{}, CaseVersions: map[string][]domain.CaseVersion{}, Prechecks: map[string]domain.PrecheckSnapshot{}, Authorizations: map[string]domain.AuthorizationManifest{}, Executions: map[string]domain.CutExecution{}, ExecutionReceipts: map[string]domain.ExecutionReceipt{}, VerificationAttempts: map[string][]domain.VerificationAttempt{}, VerificationKeys: map[string]domain.VerificationAttempt{}, FindingEvents: map[string][]domain.FindingEvent{}, Credentials: map[string]domain.ProvenanceCredential{}}
+	return snapshot{Cores: map[string]domain.CoreRecord{}, CoreVersions: map[string][]domain.CoreVersion{}, Cases: map[string]domain.SamplingCase{}, CaseVersions: map[string][]domain.CaseVersion{}, Prechecks: map[string]domain.PrecheckSnapshot{}, Authorizations: map[string]domain.AuthorizationManifest{}, Executions: map[string]domain.CutExecution{}, ExecutionReceipts: map[string]domain.ExecutionReceipt{}, VerificationAttempts: map[string][]domain.VerificationAttempt{}, FindingEvents: map[string][]domain.FindingEvent{}, Credentials: map[string]domain.ProvenanceCredential{}}
 }
 func (d *snapshot) init() {
 	if d.Cores == nil {
@@ -60,9 +60,6 @@ func (d *snapshot) init() {
 	if d.VerificationAttempts == nil {
 		d.VerificationAttempts = map[string][]domain.VerificationAttempt{}
 	}
-	if d.VerificationKeys == nil {
-		d.VerificationKeys = map[string]domain.VerificationAttempt{}
-	}
 	if d.FindingEvents == nil {
 		d.FindingEvents = map[string][]domain.FindingEvent{}
 	}
@@ -71,7 +68,7 @@ func (d *snapshot) init() {
 	}
 }
 func New(dir string) (*Store, error) {
-	s := &Store{dir: dir, data: emptySnapshot()}
+	s := &Store{dir: dir, data: emptySnapshot(), verificationKeys: map[string]domain.VerificationAttempt{}}
 	if dir != "" {
 		if e := os.MkdirAll(dir, 0755); e != nil {
 			return nil, e
@@ -274,7 +271,7 @@ func (s *Store) CommitExecution(c domain.SamplingCase, v domain.CaseVersion, e d
 func (s *Store) VerificationByKey(caseID, key string) (domain.VerificationAttempt, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	v, ok := s.data.VerificationKeys[receiptKey(caseID, key)]
+	v, ok := s.verificationKeys[receiptKey(caseID, key)]
 	return copyValue(v), ok
 }
 func (s *Store) VerificationAttempts(caseID string) []domain.VerificationAttempt {
@@ -283,23 +280,33 @@ func (s *Store) VerificationAttempts(caseID string) []domain.VerificationAttempt
 	return copyValue(s.data.VerificationAttempts[caseID])
 }
 func (s *Store) SaveRejectedVerification(a domain.VerificationAttempt) error {
-	return s.update(func(d *snapshot) error {
+	if err := s.update(func(d *snapshot) error {
 		d.VerificationAttempts[a.CaseID] = append(d.VerificationAttempts[a.CaseID], a)
-		d.VerificationKeys[receiptKey(a.CaseID, a.VerificationKey)] = a
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.verificationKeys[receiptKey(a.CaseID, a.VerificationKey)] = copyValue(a)
+	s.mu.Unlock()
+	return nil
 }
 func (s *Store) CommitFreeze(c domain.SamplingCase, v domain.CaseVersion, core domain.CoreRecord, cv domain.CoreVersion, a domain.VerificationAttempt, cred domain.ProvenanceCredential) error {
-	return s.update(func(d *snapshot) error {
+	if err := s.update(func(d *snapshot) error {
 		d.Cases[c.CaseID] = c
 		d.CaseVersions[c.CaseID] = append(d.CaseVersions[c.CaseID], v)
 		d.Cores[core.CoreID] = core
 		d.CoreVersions[core.CoreID] = append(d.CoreVersions[core.CoreID], cv)
 		d.VerificationAttempts[c.CaseID] = append(d.VerificationAttempts[c.CaseID], a)
-		d.VerificationKeys[receiptKey(c.CaseID, a.VerificationKey)] = a
 		d.Credentials[cred.CredentialID] = cred
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.verificationKeys[receiptKey(c.CaseID, a.VerificationKey)] = copyValue(a)
+	s.mu.Unlock()
+	return nil
 }
 func (s *Store) SaveFindingChanges(c domain.SamplingCase, v domain.CaseVersion, events []domain.FindingEvent) error {
 	return s.update(func(d *snapshot) error {
