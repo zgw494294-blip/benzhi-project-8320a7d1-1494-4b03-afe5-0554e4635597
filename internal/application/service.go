@@ -13,11 +13,17 @@ import (
 )
 
 type Service struct {
-	st    *store.Store
-	locks sync.Map
+	st                   *store.Store
+	locks                sync.Map
+	credentialMismatches []string
 }
 
-func New(st *store.Store) *Service { return &Service{st: st} }
+func New(st *store.Store) *Service {
+	return &Service{
+		st:                   st,
+		credentialMismatches: make([]string, 0, 8),
+	}
+}
 func (s *Service) lock(id string) *sync.Mutex {
 	v, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
 	return v.(*sync.Mutex)

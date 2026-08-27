@@ -265,38 +265,40 @@ func (s *Service) VerifyCredential(id string) (domain.CredentialVerification, er
 	if e != nil {
 		return domain.CredentialVerification{}, e
 	}
-	result := domain.CredentialVerification{Valid: true, Mismatches: []string{}, Credential: cred}
+	s.credentialMismatches = s.credentialMismatches[:0]
+	result := domain.CredentialVerification{Valid: true, Credential: cred}
 	c, e := s.st.Case(cred.CaseID)
 	if e != nil {
-		result.Mismatches = append(result.Mismatches, "caseId")
+		s.credentialMismatches = append(s.credentialMismatches, "caseId")
 	} else {
 		if c.CoreID != cred.CoreID {
-			result.Mismatches = append(result.Mismatches, "coreId")
+			s.credentialMismatches = append(s.credentialMismatches, "coreId")
 		}
 		if c.Revision != cred.FrozenRevision {
-			result.Mismatches = append(result.Mismatches, "frozenRevision")
+			s.credentialMismatches = append(s.credentialMismatches, "frozenRevision")
 		}
 		if c.Credential == nil || c.Credential.CredentialID != cred.CredentialID {
-			result.Mismatches = append(result.Mismatches, "credentialId")
+			s.credentialMismatches = append(s.credentialMismatches, "credentialId")
 		} else if c.Credential.VerificationDigest != cred.VerificationDigest {
-			result.Mismatches = append(result.Mismatches, "verificationDigest")
+			s.credentialMismatches = append(s.credentialMismatches, "verificationDigest")
 		}
 		x, e2 := s.st.Execution(c.CaseID)
 		if e2 != nil {
-			result.Mismatches = append(result.Mismatches, "execution")
+			s.credentialMismatches = append(s.credentialMismatches, "execution")
 		} else {
 			if domain.SegmentDigest(x.ActualSegments) != cred.SegmentDigest {
-				result.Mismatches = append(result.Mismatches, "segmentDigest")
+				s.credentialMismatches = append(s.credentialMismatches, "segmentDigest")
 			}
 			if analysis.ExecutionDigest(x) != cred.ExecutionDigest {
-				result.Mismatches = append(result.Mismatches, "executionDigest")
+				s.credentialMismatches = append(s.credentialMismatches, "executionDigest")
 			}
 		}
 	}
 	if analysis.CredentialDigest(cred) != cred.Digest {
-		result.Mismatches = append(result.Mismatches, "digest")
+		s.credentialMismatches = append(s.credentialMismatches, "digest")
 	}
-	sort.Strings(result.Mismatches)
-	result.Valid = len(result.Mismatches) == 0
+	sort.Strings(s.credentialMismatches)
+	result.Mismatches = s.credentialMismatches
+	result.Valid = len(s.credentialMismatches) == 0
 	return result, nil
 }
