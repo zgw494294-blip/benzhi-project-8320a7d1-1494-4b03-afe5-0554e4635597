@@ -73,6 +73,9 @@ func (d *snapshot) init() {
 func New(dir string) (*Store, error) {
 	s := &Store{dir: dir, data: emptySnapshot()}
 	if dir != "" {
+		if e := ValidateSnapshot(dir); e != nil {
+			return nil, e
+		}
 		if e := os.MkdirAll(dir, 0755); e != nil {
 			return nil, e
 		}

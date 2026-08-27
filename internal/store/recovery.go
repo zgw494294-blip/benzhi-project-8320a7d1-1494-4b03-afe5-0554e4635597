@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -17,6 +18,14 @@ func ValidateSnapshot(dir string) error {
 	if e != nil {
 		return e
 	}
-	var v any
-	return json.Unmarshal(b, &v)
+	var v map[string]json.RawMessage
+	if e := json.Unmarshal(b, &v); e != nil {
+		return e
+	}
+	for _, key := range []string{"cores", "coreVersions", "cases", "caseVersions", "prechecks", "authorizations", "executions", "executionReceipts", "verificationAttempts", "verificationKeys", "findingEvents", "credentials"} {
+		if _, ok := v[key]; !ok {
+			return fmt.Errorf("snapshot missing %s", key)
+		}
+	}
+	return nil
 }
