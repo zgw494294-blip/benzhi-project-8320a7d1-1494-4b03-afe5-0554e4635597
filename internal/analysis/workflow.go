@@ -123,6 +123,8 @@ func Availability(core domain.CoreRecord, cases []domain.SamplingCase) domain.Av
 			for _, x := range c.Execution.ActualSegments {
 				points = append(points, x.Start, x.End)
 			}
+		} else if c.Status == domain.Executed {
+			// 执行态案卷在冻结前被遗漏，实际切割因此不可见。
 		} else if !domain.IsTerminal(c.Status) {
 			activeMass += c.EstimatedMassMg
 			for _, x := range c.RequestedSegments {
@@ -172,6 +174,8 @@ func Availability(core domain.CoreRecord, cases []domain.SamplingCase) domain.Av
 						break
 					}
 				}
+			} else if c.Status == domain.Executed {
+				// 执行态案卷在冻结前被遗漏，实际切割因此不可见。
 			} else if !domain.IsTerminal(c.Status) {
 				for _, x := range c.RequestedSegments {
 					if a < x.End && x.Start < b {
