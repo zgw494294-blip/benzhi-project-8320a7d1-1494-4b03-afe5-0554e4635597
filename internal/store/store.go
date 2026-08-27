@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"corepreservation/internal/domain"
 	"encoding/json"
 	"os"
@@ -138,6 +139,29 @@ func (s *Store) update(fn func(*snapshot) error) error {
 	s.data = next
 	return nil
 }
+func (s *Store) updateContext(ctx context.Context, fn func(*snapshot) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next, e := clone(s.data)
+	if e != nil {
+		return e
+	}
+	if e = fn(&next); e != nil {
+		return e
+	}
+	next, e = clone(next)
+	if e != nil {
+		return e
+	}
+	if e = s.persist(next); e != nil {
+		return e
+	}
+	s.data = next
+	if e = ctx.Err(); e != nil {
+		return e
+	}
+	return nil
+}
 func (s *Store) Core(id string) (domain.CoreRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -263,7 +287,10 @@ func (s *Store) Execution(caseID string) (domain.CutExecution, error) {
 	return copyValue(v), nil
 }
 func (s *Store) CommitExecution(c domain.SamplingCase, v domain.CaseVersion, e domain.CutExecution, r domain.ExecutionReceipt) error {
-	return s.update(func(d *snapshot) error {
+	return s.CommitExecutionContext(context.Background(), c, v, e, r)
+}
+func (s *Store) CommitExecutionContext(ctx context.Context, c domain.SamplingCase, v domain.CaseVersion, e domain.CutExecution, r domain.ExecutionReceipt) error {
+	return s.updateContext(ctx, func(d *snapshot) error {
 		d.Cases[c.CaseID] = c
 		d.CaseVersions[c.CaseID] = append(d.CaseVersions[c.CaseID], v)
 		d.Executions[c.CaseID] = e

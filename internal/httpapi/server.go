@@ -427,7 +427,7 @@ func (s *Server) execute(w http.ResponseWriter, r *http.Request, id string) {
 		fail(w, e)
 		return
 	}
-	v, e := s.app.ExecuteReceipt(id, q.IdempotencyKey, q.AuthorizationDigest, q.ActualSegments, q.MassBeforeMg, q.SampleMassMg, q.MassAfterMg, q.ContainerCode, q.Operator, q.Witness)
+	v, e := s.app.ExecuteReceiptContext(r.Context(), id, q.IdempotencyKey, q.AuthorizationDigest, q.ActualSegments, q.MassBeforeMg, q.SampleMassMg, q.MassAfterMg, q.ContainerCode, q.Operator, q.Witness)
 	if e != nil {
 		fail(w, e)
 		return

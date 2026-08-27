@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"corepreservation/internal/analysis"
 	"corepreservation/internal/domain"
 	"fmt"
@@ -66,6 +67,15 @@ func (s *Service) Authorization(id string) (domain.AuthorizationView, error) {
 }
 
 func (s *Service) ExecuteReceipt(id, key, auth string, actual []domain.Segment, before, sample, after int, container, operator, witness string) (domain.ExecutionReceipt, error) {
+	return s.executeReceipt(context.Background(), id, key, auth, actual, before, sample, after, container, operator, witness)
+}
+func (s *Service) ExecuteReceiptContext(ctx context.Context, id, key, auth string, actual []domain.Segment, before, sample, after int, container, operator, witness string) (domain.ExecutionReceipt, error) {
+	if e := ctx.Err(); e != nil {
+		return domain.ExecutionReceipt{}, e
+	}
+	return s.executeReceipt(ctx, id, key, auth, actual, before, sample, after, container, operator, witness)
+}
+func (s *Service) executeReceipt(ctx context.Context, id, key, auth string, actual []domain.Segment, before, sample, after int, container, operator, witness string) (domain.ExecutionReceipt, error) {
 	key = strings.TrimSpace(key)
 	auth = strings.TrimSpace(auth)
 	container = strings.TrimSpace(container)
@@ -126,7 +136,7 @@ func (s *Service) ExecuteReceipt(id, key, auth string, actual []domain.Segment, 
 	c.UpdatedAt = now
 	r := domain.ExecutionReceipt{CaseID: id, IdempotencyKey: key, RequestDigest: requestDigest, ExecutionID: x.ExecutionID, Status: domain.Executed, Execution: x, CreatedAt: now}
 	v := domain.CaseVersion{Case: c, ChangeSummary: []domain.Change{{Field: "status", Before: domain.Authorized, After: domain.Executed}}, RevisionNote: "记录切割执行", Actor: x.Operator, CreatedAt: now}
-	if e = s.st.CommitExecution(c, v, x, r); e != nil {
+	if e = s.st.CommitExecutionContext(ctx, c, v, x, r); e != nil {
 		return domain.ExecutionReceipt{}, e
 	}
 	return r, nil
