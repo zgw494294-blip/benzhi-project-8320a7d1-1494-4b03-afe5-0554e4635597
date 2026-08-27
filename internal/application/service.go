@@ -522,5 +522,9 @@ func (s *Service) SubmitCase(id string) (domain.SamplingCase, error) {
 	}
 	c.Status = domain.Submitted
 	c.UpdatedAt = time.Now().UTC()
-	return c, s.st.SaveCase(c)
+	return c, s.persistSubmittedCase(c)
+}
+
+func (s *Service) persistSubmittedCase(c domain.SamplingCase) error {
+	return s.st.SaveCase(c)
 }
